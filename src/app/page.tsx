@@ -1,103 +1,271 @@
-import Image from "next/image";
+// src/app/page.tsx - CON COMPONENTES DE DEBUG
+'use client';
 
-export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+import { useState, useEffect } from 'react';
+import { useFirebase } from '../hooks/useFirebase';
+import { useRouletteData } from '../hooks/useRouletteData';
+import { usePagination } from '../hooks/usePagination';
+import MessageBox from '../components/ui/MessageBox';
+import ConnectionStatus from '../components/ui/ConnectionStatus';
+import FirestoreStructureChecker from '../components/debug/FirestoreStructureChecker';
+import NumberInput from '../components/roulette/NumberInput';
+import DatePicker from '../components/roulette/DatePicker';
+import ResultsTable from '../components/roulette/ResultsTable';
+import SectorGraphics from '../components/roulette/SectorGraphics';
+import SectorFrequencyChart from '../components/charts/SectorFrequencyChart';
+import NumberRepetitionsChart from '../components/charts/NumberRepetitionsChart';
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || ''
+};
+
+const customAppId = process.env.NEXT_PUBLIC_CUSTOM_APP_ID || 'default-app-id';
+const initialAuthToken = process.env.NEXT_PUBLIC_INITIAL_AUTH_TOKEN;
+
+export default function RouletteTracker() {
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
+  const [isMessageVisible, setIsMessageVisible] = useState(false);
+  const [showDebug, setShowDebug] = useState(process.env.NODE_ENV === 'development');
+
+  // Firebase initialization
+  const { isInitialized, user, isLoading: authLoading, error: authError, signIn } = useFirebase(
+    firebaseConfig, 
+    customAppId
+  );
+
+  let date = new Date();
+
+  // Roulette data management
+  const {
+    results,
+    statistics,
+    isLoading: dataLoading,
+    error: dataError,
+    connectionStatus,
+    submitNumber,
+    updateDate,
+    testConnection,
+    selectedDate
+  } = useRouletteData(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+
+  // Pagination for results table (show newest first)
+  const sortedResults = [...results].sort((a, b) => b.spin - a.spin);
+  const {
+    paginatedItems: paginatedResults,
+    currentPage,
+    totalPages,
+    goToNextPage,
+    goToPreviousPage,
+    canGoNext,
+    canGoPrevious
+  } = usePagination(sortedResults, 10);
+
+  // Auto sign-in on component mount
+  useEffect(() => {
+    if (isInitialized && !user && !authLoading) {
+      console.log('🔐 Auto-signing in...');
+      signIn(initialAuthToken);
+    }
+  }, [isInitialized, user, authLoading, signIn]);
+
+  // Handle submission
+  const handleSubmit = async (number: string) => {
+    if (!user) {
+      showMessage('Usuario no autenticado', 'error');
+      return;
+    }
+
+    // Check if trying to submit for current day only
+    console.log('Selected date for submission:', selectedDate);
+    const isCurrentDay = new Date().toDateString() === selectedDate.toDateString();
+    if (!isCurrentDay) {
+      showMessage('Solo se pueden agregar números para el día actual.', 'error');
+      return;
+    }
+
+    try {
+      await submitNumber({ number, userId: user.uid });
+      showMessage('Número enviado con éxito!', 'success');
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : 'Error al enviar número', 'error');
+    }
+  };
+
+  const showMessage = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setMessage(text);
+    setMessageType(type);
+    setIsMessageVisible(true);
+  };
+
+  const hideMessage = () => {
+    setIsMessageVisible(false);
+  };
+
+  // Show loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600">Conectando a Firebase...</p>
+          <p className="text-xs text-gray-500 mt-2">
+            App ID: {customAppId}
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Error de Conexión Firebase</h1>
+          <p className="text-gray-600 mb-4">{authError}</p>
+          <div className="bg-gray-100 p-3 rounded text-xs text-left mb-4">
+            <strong>Configuración actual:</strong><br/>
+            Project ID: {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'No configurado'}<br/>
+            App ID: {customAppId}<br/>
+            Auth Domain: {process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'No configurado'}
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-100 font-sans leading-normal tracking-normal p-4 min-h-screen">
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-4 sm:p-8 mt-4 sm:mt-10">
+        
+        {/* Header */}
+        <h1 className="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-4 sm:mb-6">
+          Rastreador de Datos de Ruleta
+        </h1>
+        <p className="text-center text-gray-500 mb-6 sm:mb-8">
+          {user ? `ID de Usuario: ${user.uid}` : 'Conectando...'}
+        </p>
+
+        {/* Debug Toggle */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mb-4 text-center">
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className="text-xs bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
+            >
+              {showDebug ? 'Ocultar' : 'Mostrar'} Debug
+            </button>
+          </div>
+        )}
+
+        {/* Connection Status */}
+        {showDebug && 
+          <ConnectionStatus 
+          status={connectionStatus} 
+          error={dataError} 
+          onRetry={testConnection} 
+        />
+        }
+      
+
+        {/* Debug Panel */}
+        {showDebug && (
+          <FirestoreStructureChecker />
+        )}
+
+        {/* Message Box */}
+        <MessageBox
+          message={message}
+          isVisible={isMessageVisible}
+          onHide={hideMessage}
+          type={messageType}
+        />
+
+        {/* Main Content - Only show if connected */}
+        {connectionStatus === 'connected' && (
+          <>
+            {/* Input Form */}
+            <NumberInput
+              onSubmit={handleSubmit}
+              disabled={!user || dataLoading}
+            />
+
+            {/* Date Picker */}
+            <DatePicker
+              selectedDate={selectedDate}
+              onDateChange={updateDate}
+            />
+
+            {/* Results Table */}
+            <ResultsTable
+              results={paginatedResults}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPrevious={goToPreviousPage}
+              onNext={goToNextPage}
+              canGoPrevious={canGoPrevious}
+              canGoNext={canGoNext}
+            />
+
+            {/* Sector Graphics */}
+            <SectorGraphics results={results} />
+
+            {/* Charts */}
+            <hr className="my-6 sm:my-8" />
+            <SectorFrequencyChart 
+              statistics={statistics}
+              isLoading={dataLoading}
+            />
+
+            <hr className="my-6 sm:my-8" />
+            <NumberRepetitionsChart 
+              statistics={statistics}
+              isLoading={dataLoading}
+            />
+          </>
+        )}
+
+        {/* Instructions for setup */}
+        {connectionStatus === 'error' && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mt-6">
+            <h3 className="text-lg font-bold text-yellow-800 mb-4">🛠️ Pasos para Configurar</h3>
+            <ol className="text-sm text-yellow-700 space-y-2 list-decimal list-inside">
+              <li>Ve a <a href="https://console.firebase.google.com" className="underline" target="_blank">Firebase Console</a></li>
+              <li>Selecciona tu proyecto → Firestore Database</li>
+              <li>Ir a "Rules" y configurar:</li>
+            </ol>
+            <pre className="bg-gray-800 text-green-400 p-3 rounded mt-3 text-xs overflow-x-auto">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+            </pre>
+            <p className="text-xs text-yellow-600 mt-2">
+              ⚠️ Esta regla es para desarrollo. Usa reglas más restrictivas en producción.
+            </p>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
