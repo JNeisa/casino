@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback } from 'react';
 import RouletteService from '../services/roulette/rouletteService';
 import { RouletteResult, RouletteSubmission, RouletteStatistics } from '../services/roulette/types';
 
+type DateOrRange = Date | { start: Date; end: Date };
+
 interface UseRouletteDataReturn {
   results: RouletteResult[];
   statistics: RouletteStatistics;
@@ -12,12 +14,13 @@ interface UseRouletteDataReturn {
   error: string | null;
   connectionStatus: 'connecting' | 'connected' | 'error';
   submitNumber: (submission: RouletteSubmission) => Promise<void>;
-  updateDate: (date: Date) => void;
+  updateDate: (date: DateOrRange) => void;
   testConnection: () => Promise<void>;
-  selectedDate: Date;
+  selectedDate: DateOrRange;
+  isRange: boolean;
 }
 
-export function useRouletteData(initialDate: Date): UseRouletteDataReturn {
+export function useRouletteData(initialDate: DateOrRange): UseRouletteDataReturn {
   const [results, setResults] = useState<RouletteResult[]>([]);
   const [statistics, setStatistics] = useState<RouletteStatistics>({
     sectorCounts: { A: 0, B: 0, C: 0, D: 0 },
@@ -27,12 +30,11 @@ export function useRouletteData(initialDate: Date): UseRouletteDataReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
-  const [selectedDate, setSelectedDate] = useState(initialDate);
+  const [selectedDate, setSelectedDate] = useState<DateOrRange>(initialDate);
   const [rouletteService] = useState(() => new RouletteService());
 
-  const updateDate = useCallback((date: Date) => {
-    console.log('Updating date to:', date);
-    setSelectedDate(date);
+  const updateDate = useCallback((dateOrRange: DateOrRange) => {
+    setSelectedDate(dateOrRange);
     setError(null);
     setConnectionStatus('connecting');
   }, []);
@@ -73,30 +75,46 @@ export function useRouletteData(initialDate: Date): UseRouletteDataReturn {
 
   // Subscribe to real-time data updates
   useEffect(() => {
-    console.log('Setting up realtime listener for date:', selectedDate);
     setIsLoading(true);
-    
-    const unsubscribe = rouletteService.subscribeToDateResults(
-      selectedDate,
-      (newResults) => {
-        console.log('✅ Received real-time data:', newResults.length, 'results');
-        setResults(newResults);
-        setStatistics(rouletteService.getStatistics(newResults));
-        setIsLoading(false);
-        setConnectionStatus('connected');
-        setError(null);
-      },
-      (error) => {
-        console.error('❌ Real-time listener error:', error);
-        setError(error);
-        setIsLoading(false);
-        setConnectionStatus('error');
-      }
-    );
+
+    let unsubscribe: (() => void) | undefined;
+
+    if (selectedDate instanceof Date) {
+      // Single day logic (real-time)
+      unsubscribe = rouletteService.subscribeToDateResults(
+        selectedDate,
+        (newResults) => {
+          setResults(newResults);
+          setStatistics(rouletteService.getStatistics(newResults));
+          setIsLoading(false);
+          setConnectionStatus('connected');
+          setError(null);
+        },
+        (error) => {
+          setError(error);
+          setIsLoading(false);
+          setConnectionStatus('error');
+        }
+      );
+    } else if (selectedDate && 'start' in selectedDate && 'end' in selectedDate) {
+      // Date range logic (fetch once, no real-time)
+      rouletteService.getResultsForRange(selectedDate.start, selectedDate.end)
+        .then((newResults) => {
+          setResults(newResults);
+          setStatistics(rouletteService.getStatistics(newResults));
+          setIsLoading(false);
+          setConnectionStatus('connected');
+          setError(null);
+        })
+        .catch((error) => {
+          setError(error);
+          setIsLoading(false);
+          setConnectionStatus('error');
+        });
+    }
 
     return () => {
-      console.log('Cleaning up realtime listener');
-      unsubscribe();
+      if (unsubscribe) unsubscribe();
       setIsLoading(false);
     };
   }, [selectedDate, rouletteService]);
@@ -126,6 +144,7 @@ export function useRouletteData(initialDate: Date): UseRouletteDataReturn {
     submitNumber,
     updateDate,
     testConnection,
-    selectedDate
+    selectedDate,
+    isRange: !(selectedDate instanceof Date),
   };
 }

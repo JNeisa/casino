@@ -66,6 +66,7 @@ export default function RouletteTracker() {
     updateDate,
     testConnection,
     selectedDate,
+    isRange,
   } = useRouletteData(
     new Date(date.getFullYear(), date.getMonth(), date.getDate())
   );
@@ -131,7 +132,9 @@ export default function RouletteTracker() {
     // Check if trying to submit for current day only
     console.log("Selected date for submission:", selectedDate);
     const isCurrentDay =
-      new Date().toDateString() === selectedDate.toDateString();
+      selectedDate instanceof Date
+        ? new Date().toDateString() === selectedDate.toDateString()
+        : false;
     if (!isCurrentDay) {
       showMessage(
         "Solo se pueden agregar números para el día actual.",
@@ -267,24 +270,28 @@ export default function RouletteTracker() {
         {connectionStatus === "connected" && (
           <>
             {/* Input Form */}
-            <NumberInput
-              onSubmit={handleSubmit}
-              disabled={!user || dataLoading}
-            />
+            {!isRange && (
+              <NumberInput
+                onSubmit={handleSubmit}
+                disabled={!user || dataLoading}
+              />
+            )}
 
             {/* Date Picker */}
-            <DatePicker selectedDate={selectedDate} onDateChange={updateDate} />
+            <DatePicker value={selectedDate} onChange={updateDate} />
 
             {/* Results Table */}
-            <ResultsTable
-              results={paginatedResults}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPrevious={goToPreviousPage}
-              onNext={goToNextPage}
-              canGoPrevious={canGoPrevious}
-              canGoNext={canGoNext}
-            />
+            {!isRange && (
+              <ResultsTable
+                results={paginatedResults}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPrevious={goToPreviousPage}
+                onNext={goToNextPage}
+                canGoPrevious={canGoPrevious}
+                canGoNext={canGoNext}
+              />
+            )}
 
             {/* Sector Graphics */}
             <SectorGraphics results={results} />

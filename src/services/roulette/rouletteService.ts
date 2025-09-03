@@ -232,6 +232,25 @@ export class RouletteService {
     }
   }
 
+  async getResultsForRange(start: Date, end: Date): Promise<any[]> {
+  if (!this.firebaseService.isInitialized()) {
+    throw new Error('Firebase no está inicializado');
+  }
+
+  const db = this.firebaseService.getFirestore();
+  const appId = this.firebaseService.getAppId();
+  const collectionRef = collection(db, `${appId}/data/roulette-results`);
+
+  const q = query(
+    collectionRef,
+    where('timestamp', '>=', Timestamp.fromDate(start)),
+    where('timestamp', '<', Timestamp.fromDate(end)),
+    orderBy('timestamp', 'asc')
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
   /**
    * Test Firebase connection
    */
