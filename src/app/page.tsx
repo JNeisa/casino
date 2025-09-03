@@ -98,20 +98,6 @@ export default function RouletteTracker() {
     }
   };
 
-  // Handle anonymous login
-  const handleAnonymousLogin = async () => {
-    try {
-      setLoginError(null);
-      await signIn(initialAuthToken);
-    } catch (error) {
-      setLoginError(
-        error instanceof Error
-          ? error.message
-          : "Error al conectar como invitado"
-      );
-    }
-  };
-
   // Handle sign out
   const handleSignOut = async () => {
     try {
@@ -129,11 +115,18 @@ export default function RouletteTracker() {
       return;
     }
 
-    // Check if trying to submit for current day only
+    // Check if trying to submit for today and yesterday
     console.log("Selected date for submission:", selectedDate);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
     const isCurrentDay =
       selectedDate instanceof Date
-        ? new Date().toDateString() === selectedDate.toDateString()
+        ? (
+            selectedDate.toDateString() === today.toDateString() ||
+            selectedDate.toDateString() === yesterday.toDateString()
+          )
         : false;
     if (!isCurrentDay) {
       showMessage(
@@ -143,8 +136,10 @@ export default function RouletteTracker() {
       return;
     }
 
+    console.log("Submitting number for date:", selectedDate);
+
     try {
-      await submitNumber({ number, userId: user.uid });
+      await submitNumber({ number, userId: user.uid, date: selectedDate as Date });
       showMessage("Número enviado con éxito!", "success");
     } catch (error) {
       showMessage(

@@ -38,9 +38,8 @@ export class RouletteService {
     }
 
     // Check daily limit (80 submissions)
-    const today = new Date();
     try {
-      const dailyCount = await this.getDailySubmissionCount(today);
+      const dailyCount = await this.getDailySubmissionCount(submission.date);
       
       if (dailyCount >= 80) {
         throw new Error('El límite de 80 números por día ya ha sido alcanzado.');
@@ -58,15 +57,18 @@ export class RouletteService {
     const db = this.firebaseService.getFirestore();
     const appId = this.firebaseService.getAppId();
     const resultsCollection = collection(db, `${appId}/data/roulette-results`);
+    let date = submission.date;
+    let timestamp = Timestamp.fromDate(date);
 
     try {
       await addDoc(resultsCollection, {
         number,
         sector,
-        timestamp: Timestamp.fromDate(new Date()),
+        timestamp: timestamp,
         userId
       });
-      console.log('Number submitted successfully:', { number, sector });
+
+      console.log('Number submitted successfully:', { number, sector, date, timestamp });
     } catch (error) {
       console.error('Error submitting number:', error);
       
@@ -161,16 +163,11 @@ export class RouletteService {
           });
 
           // Sort by timestamp to ensure correct spin order
-          results.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          results.sort((a, b) => a.spin - b.spin);
           
-          // Reassign spin numbers after sorting
-          const sortedResults = results.map((result, index) => ({
-            ...result,
-            spin: index + 1
-          }));
 
-          console.log('Processed results:', sortedResults);
-          callback(sortedResults);
+          console.log('Processed results:', results);
+          callback(results);
         },
         (error) => {
           console.error('Firestore listener error:', error);
@@ -241,10 +238,13 @@ export class RouletteService {
   const appId = this.firebaseService.getAppId();
   const collectionRef = collection(db, `${appId}/data/roulette-results`);
 
+  const startOfDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endOfDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+
   const q = query(
     collectionRef,
-    where('timestamp', '>=', Timestamp.fromDate(start)),
-    where('timestamp', '<', Timestamp.fromDate(end)),
+    where('timestamp', '>=', Timestamp.fromDate(startOfDay)),
+    where('timestamp', '<', Timestamp.fromDate(endOfDay)),
     orderBy('timestamp', 'asc')
   );
   const snapshot = await getDocs(q);

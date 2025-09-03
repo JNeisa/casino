@@ -13,6 +13,7 @@ export interface RouletteResult {
 export interface RouletteSubmission {
   number: string;
   userId: string;
+  date: Date;
 }
 
 export interface SectorCounts {

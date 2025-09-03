@@ -38,6 +38,7 @@ export default function DatePicker({ value, onChange }: DatePickerProps) {
     } else {
       updated = { start: current.start > newDate ? newDate : current.start, end: newDate };
     }
+    console.log('Updated range:', updated);
     onChange(updated);
   };
 
