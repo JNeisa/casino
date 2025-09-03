@@ -1,6 +1,7 @@
 // src/app/page.tsx - WITH LOGIN SYSTEM
 "use client";
 
+import { updateDoc, doc } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { useFirebase } from "../hooks/useFirebase";
 import { useRouletteData } from "../hooks/useRouletteData";
@@ -16,6 +17,8 @@ import ResultsTable from "../components/roulette/ResultsTable";
 import SectorGraphics from "../components/roulette/SectorGraphics";
 import SectorFrequencyChart from "../components/charts/SectorFrequencyChart";
 import NumberRepetitionsChart from "../components/charts/NumberRepetitionsChart";
+import FirebaseService from "@/services/firebase/config";
+import { getSector } from "@/utils/roulette";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -98,6 +101,47 @@ export default function RouletteTracker() {
     }
   };
 
+  const handleUpdateResult = async (resultId: string, newNumber: string) => {
+    if (!user || user.isAnonymous) {
+      showMessage("Acceso solo para usuarios autenticados", "error");
+      return;
+    }
+
+    try {
+      // Get Firebase service instance
+      const firebaseService = FirebaseService.getInstance();;
+
+      if (!firebaseService || !isInitialized) {
+        throw new Error("Firebase no está inicializado");
+      }
+
+      // Update the document in Firestore
+      const db = firebaseService.getFirestore();
+      const appId = firebaseService.getAppId();
+      const docRef = doc(db, `${appId}/data/roulette-results`, resultId);
+
+      const newSector = getSector(newNumber);
+      if (!newSector) {
+        throw new Error("No se pudo determinar el sector para este número");
+      }
+
+      await updateDoc(docRef, {
+        number: newNumber,
+        sector: newSector,
+      });
+
+      showMessage("Resultado actualizado con éxito!", "success");
+    } catch (error) {
+      showMessage(
+        error instanceof Error
+          ? error.message
+          : "Error al actualizar resultado",
+        "error"
+      );
+      throw error;
+    }
+  };
+
   // Handle sign out
   const handleSignOut = async () => {
     try {
@@ -123,10 +167,8 @@ export default function RouletteTracker() {
 
     const isCurrentDay =
       selectedDate instanceof Date
-        ? (
-            selectedDate.toDateString() === today.toDateString() ||
-            selectedDate.toDateString() === yesterday.toDateString()
-          )
+        ? selectedDate.toDateString() === today.toDateString() ||
+          selectedDate.toDateString() === yesterday.toDateString()
         : false;
     if (!isCurrentDay) {
       showMessage(
@@ -139,7 +181,11 @@ export default function RouletteTracker() {
     console.log("Submitting number for date:", selectedDate);
 
     try {
-      await submitNumber({ number, userId: user.uid, date: selectedDate as Date });
+      await submitNumber({
+        number,
+        userId: user.uid,
+        date: selectedDate as Date,
+      });
       showMessage("Número enviado con éxito!", "success");
     } catch (error) {
       showMessage(
@@ -285,6 +331,7 @@ export default function RouletteTracker() {
                 onNext={goToNextPage}
                 canGoPrevious={canGoPrevious}
                 canGoNext={canGoNext}
+                onUpdateResult={handleUpdateResult}
               />
             )}
 
