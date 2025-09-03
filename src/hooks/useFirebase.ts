@@ -1,10 +1,9 @@
-
 // src/hooks/useFirebase.ts
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import FirebaseService, { FirebaseConfig } from '../services/firebase/config';
-import { AuthService, AuthUser } from '../services/firebase/auth';
+import { AuthService, AuthUser, LoginCredentials } from '../services/firebase/auth';
 
 interface UseFirebaseReturn {
   isInitialized: boolean;
@@ -12,6 +11,7 @@ interface UseFirebaseReturn {
   isLoading: boolean;
   error: string | null;
   signIn: (customToken?: string) => Promise<void>;
+  signInWithEmail: (credentials: LoginCredentials) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -67,6 +67,21 @@ export function useFirebase(config: FirebaseConfig, appId?: string): UseFirebase
     }
   }, [authService]);
 
+  const signInWithEmail = useCallback(async (credentials: LoginCredentials) => {
+    if (!authService) return;
+    
+    setIsLoading(true);
+    try {
+      await authService.signInWithEmail(credentials);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error signing in with email');
+      throw err; // Re-throw so the component can handle it
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authService]);
+
   const signOut = useCallback(async () => {
     if (!authService) return;
     
@@ -84,6 +99,7 @@ export function useFirebase(config: FirebaseConfig, appId?: string): UseFirebase
     isLoading,
     error,
     signIn,
+    signInWithEmail,
     signOut
   };
 }
