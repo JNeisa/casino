@@ -19,6 +19,7 @@ import SectorFrequencyChart from "../components/charts/SectorFrequencyChart";
 import NumberRepetitionsChart from "../components/charts/NumberRepetitionsChart";
 import FirebaseService from "@/services/firebase/config";
 import { getSector } from "@/utils/roulette";
+import RouletteTrackingTable from "@/components/roulette/RouletteTrackingTable";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -336,8 +337,8 @@ export default function RouletteTracker() {
             )}
 
             {/* Sector Graphics */}
-            <SectorGraphics results={results} />
-
+            {/* <SectorGraphics results={results} />= */}
+            <RouletteTrackingTable results={results}  />
             {/* Charts */}
             <hr className="my-6 sm:my-8" />
             <SectorFrequencyChart

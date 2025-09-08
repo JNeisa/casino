@@ -37,9 +37,10 @@ export class RouletteService {
       throw new Error('Número inválido. Por favor, ingrese un número del 0, 00 o del 1-36.');
     }
 
-    // Check daily limit (80 submissions)
+    // Check daily limit and get current count to determine spin number
+    let dailyCount: number;
     try {
-      const dailyCount = await this.getDailySubmissionCount(submission.date);
+      dailyCount = await this.getDailySubmissionCount(submission.date);
       
       if (dailyCount >= 80) {
         throw new Error('El límite de 80 números por día ya ha sido alcanzado.');
@@ -47,6 +48,7 @@ export class RouletteService {
     } catch (error) {
       console.warn('Could not check daily limit:', error);
       // Continue anyway, let server-side validation handle it
+      dailyCount = 0; // Fallback
     }
 
     const sector = getSector(number);
@@ -59,13 +61,16 @@ export class RouletteService {
     const resultsCollection = collection(db, `${appId}/data/roulette-results`);
     let date = submission.date;
     let timestamp = Timestamp.fromDate(date);
+    const spinNumber = dailyCount + 1;
+
 
     try {
       await addDoc(resultsCollection, {
         number,
         sector,
         timestamp: timestamp,
-        userId
+        userId,
+        spin: spinNumber
       });
 
       console.log('Number submitted successfully:', { number, sector, date, timestamp });
@@ -155,14 +160,14 @@ export class RouletteService {
                 sector: data.sector as Sector,
                 timestamp,
                 userId: data.userId || '',
-                spin: index + 1
+                spin: data.spin || (index + 1) // Fallback to index if spin missing
               });
             } catch (docError) {
               console.error('Error processing document:', doc.id, docError);
             }
           });
 
-          // Sort by timestamp to ensure correct spin order
+          // Sort by spin to ensure correct spin order
           results.sort((a, b) => a.spin - b.spin);
           
 
