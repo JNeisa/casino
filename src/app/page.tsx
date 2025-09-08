@@ -338,7 +338,8 @@ export default function RouletteTracker() {
 
             {/* Sector Graphics */}
             {/* <SectorGraphics results={results} />= */}
-            <RouletteTrackingTable results={results}  />
+                {!isRange && (<RouletteTrackingTable results={results}  />)}
+            
             {/* Charts */}
             <hr className="my-6 sm:my-8" />
             <SectorFrequencyChart
